@@ -1,0 +1,17 @@
+{
+  "name": "goldtrace-ghana",
+  "version": "1.0.0",
+  "private": true,
+  "description": "National Gold Supply Chain Intelligence & Traceability System (GoldBod)",
+  "scripts": {
+    "install:all": "npm --prefix frontend install && npm --prefix mobile install && pip install -r backend/requirements.txt",
+    "dev:frontend": "npm --prefix frontend run dev -- --host",
+    "build:frontend": "npm --prefix frontend run build",
+    "dev:mobile": "npm --prefix mobile start",
+    "backend:run": "cd backend && python manage.py runserver 0.0.0.0:8000",
+    "backend:worker": "cd backend && celery -A goldtrace worker -l info",
+    "backend:seed": "cd backend && python manage.py seed_demo",
+    "verify:logic": "cd backend && python scripts/verify_core.py",
+    "_note": "frontend and mobile are independent installs; no npm workspaces (React Native must not share React with the web app)"
+  }
+}
