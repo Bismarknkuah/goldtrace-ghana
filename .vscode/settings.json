@@ -1,0 +1,13 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/node_modules": true,
+    "**/.expo": true
+  },
+  "eslint.workingDirectories": ["./frontend", "./mobile"],
+  "[python]": { "editor.formatOnSave": false },
+  "[typescriptreact]": { "editor.formatOnSave": true }
+}

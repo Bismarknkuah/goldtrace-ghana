@@ -1,0 +1,13 @@
+{
+  "name": "goldtrace-fabric-gateway",
+  "version": "1.0.0",
+  "description": "HTTP sidecar that anchors GoldTrace custody hashes to Hyperledger Fabric",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": { "start": "node server.js" },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0",
+    "@hyperledger/fabric-gateway": "^1.5.0",
+    "express": "^4.19.0"
+  }
+}
