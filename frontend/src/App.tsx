@@ -23,6 +23,7 @@ import Compliance from "./pages/Compliance";
 import Profile from "./pages/Profile";
 import Users from "./pages/Users";
 import Transparency from "./pages/Transparency";
+import TradingRules from "./pages/TradingRules";
 import Marketplace from "./pages/Marketplace";
 import PurchaseRequests from "./pages/PurchaseRequests";
 import SystemSettings from "./pages/SystemSettings";
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="marketplace" element={<Marketplace />} />
           <Route path="requests" element={<PurchaseRequests />} />
           <Route path="transparency" element={<Transparency />} />
+          <Route path="rules" element={<TradingRules />} />
           <Route path="profile" element={<Profile />} />
           <Route path="users" element={<Users />} />
         </Route>

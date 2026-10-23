@@ -13,7 +13,7 @@ const FEATURES: [key: string, label: string][] = [
   ["marketplace","Marketplace"], ["requests","Purchase requests"], ["receipts","Receipts"], ["certificates","Certificates"],
   ["intelligence","Risk intelligence"], ["security","Security"], ["compliance","Compliance"], ["licensing","Licensing"],
   ["verify","Verify passport"], ["map","Geospatial map"], ["sites","Mining sites (satellite)"], ["reports","Public reports"],
-  ["revenue","Revenue"], ["transparency","Transparency"], ["users","User management"], ["settings","System settings"],
+  ["revenue","Revenue"], ["transparency","Transparency"], ["rules","Trading rules & my compliance"], ["users","User management"], ["settings","System settings"],
   ["profile","My profile"],
 ];
 
@@ -120,6 +120,8 @@ function GeneralTab() {
           <TextField type="number" label="Mass-balance tolerance (%)" value={c.mass_balance_tolerance_pct ?? 0.5} onChange={num("mass_balance_tolerance_pct")} inputProps={{ step: 0.1 }} />
           <TextField type="number" label="FX discrepancy flag (%)" value={c.fx_discrepancy_pct ?? 5} onChange={num("fx_discrepancy_pct")} inputProps={{ step: 0.5 }} />
           <TextField type="number" label="Max attachments per public report" value={c.max_report_attachments ?? 8} onChange={num("max_report_attachments")} />
+          <TextField type="number" label="Price band: max % below BoG reference" value={c.price_band_below_pct ?? 10} onChange={num("price_band_below_pct")} helperText="Lower offers are held for review (miner under-payment)" />
+          <TextField type="number" label="Price band: max % above BoG reference" value={c.price_band_above_pct ?? 15} onChange={num("price_band_above_pct")} helperText="Higher offers are held for review (value inflation)" />
         </Box>
       </CardContent></Card>
       {msg && <Alert severity="success" onClose={() => setMsg(null)}>{msg}</Alert>}

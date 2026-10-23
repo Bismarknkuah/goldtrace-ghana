@@ -237,8 +237,13 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
     @extend_schema(tags=["production"], responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=["get"])
     def compliance_check(self, request, pk=None):
-        """Preview the pre-transaction compliance gate for the current user."""
-        return Response(precheck_transaction(self.get_object(), request.user))
+        """Preview the pre-transaction compliance gate for the current user (?price=GHS)."""
+        price = request.query_params.get("price") or None
+        try:
+            price = float(price) if price else None
+        except ValueError:
+            price = None
+        return Response(precheck_transaction(self.get_object(), request.user, price=price))
 
     @extend_schema(tags=["production"], responses=OpenApiTypes.OBJECT)
     @action(detail=False, methods=["post"])
@@ -459,7 +464,7 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
         """Eligible buyer purchases a listed batch: ownership moves, receipt issued."""
         from decimal import Decimal
 
-        from core.supply_chain import resolve_stage
+        from core.supply_chain import explain, resolve_stage
         from trading.models import OwnershipTransfer, TransferStatus
 
         batch = self.get_object()
@@ -471,14 +476,8 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
             return Response({"detail": "You already own this gold."}, status=400)
         stage, eligible = resolve_stage(seller.role, buyer.role)
         if not (eligible or buyer.is_superuser):
-            return Response({"detail": "Your role is not permitted to buy from this seller "
-                             "under the GoldBod supply-chain flow."}, status=403)
-        # Pre-transaction compliance gate.
-        gate = precheck_transaction(batch, buyer)
-        if gate["decision"] == "block":
-            return Response({"detail": "Purchase blocked by compliance checks.",
-                             "compliance": gate}, status=403)
-        needs_review = gate["decision"] == "review"
+            return Response({"detail": explain(seller.role, buyer.role), "rule": "trading_order"},
+                            status=403)
         price = batch.asking_price_ghs or Decimal("0")
         offer = request.data.get("offer_price_ghs")
         if offer not in (None, ""):
@@ -489,6 +488,12 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
             if offer <= 0:
                 return Response({"detail": "Offer price must be greater than zero."}, status=400)
             price = offer
+        # Pre-transaction GoldBod compliance gate (rules, licences, origin, price band, risk).
+        gate = precheck_transaction(batch, buyer, price=price or None)
+        if gate["decision"] == "block":
+            return Response({"detail": "Purchase blocked: " + "; ".join(gate["blocking"]),
+                             "compliance": gate}, status=403)
+        needs_review = gate["decision"] == "review"
         existing = OwnershipTransfer.objects.filter(
             batch=batch, buyer=buyer, status=TransferStatus.PENDING).first()
         if existing:

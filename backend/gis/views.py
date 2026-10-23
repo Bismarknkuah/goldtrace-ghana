@@ -249,7 +249,17 @@ class IllegalMiningAlertsView(APIView):
                 "maps_link": f"https://www.google.com/maps?q={lat},{lng}",
             })
         alerts.sort(key=lambda a: -a["probability"])
+        alerts = alerts[:50]
+        # Link each site to gold lots whose recorded origin lies within 3 km —
+        # the lots investigators should hold or trace.
+        from production.models import GoldBatch
+
+        from .sourcing import lots_near
+        batches = list(GoldBatch.objects.select_related("current_owner"))
+        for a in alerts:
+            a["linked_lots"] = lots_near(a["latitude"], a["longitude"], km=3.0, batches=batches)[:10]
         summary = {"total": len(alerts),
                    "critical": sum(1 for a in alerts if a["band"] == "critical"),
-                   "high": sum(1 for a in alerts if a["band"] == "high")}
-        return Response({"summary": summary, "alerts": alerts[:50]})
+                   "high": sum(1 for a in alerts if a["band"] == "high"),
+                   "linked_lots": len({lot["batch_code"] for a in alerts for lot in a["linked_lots"]})}
+        return Response({"summary": summary, "alerts": alerts})

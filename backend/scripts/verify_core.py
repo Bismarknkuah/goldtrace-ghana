@@ -185,6 +185,13 @@ s3, r3 = resolve_stage("miner", "exporter")
 print(f"{PASS if s1 == 'miner_to_aggregator' and r1 else FAIL} miner->aggregator regular: {s1}")
 print(f"{PASS if s2 == 'aggregator_to_goldbod' and r2 else FAIL} aggregator->GoldBod regular: {s2}")
 print(f"{PASS if s3 == 'other' and not r3 else FAIL} miner->exporter flagged irregular: {s3}, regular={r3}")
+from core.supply_chain import explain, rulebook  # noqa: E402
+_s, r4 = resolve_stage("tier1_buyer", "international_buyer")
+_s, r5 = resolve_stage("goldbod_officer", "international_buyer")
+_s, r6 = resolve_stage("aggregator", "tier1_buyer")
+print(f"{PASS if not r4 and r5 else FAIL} foreign buyers off-take only from GoldBod")
+print(f"{PASS if not r6 and 'may only sell to' in explain('aggregator', 'tier1_buyer') else FAIL} no backward sale, reason explained")
+print(f"{PASS if len(rulebook()['roles']) == 10 else FAIL} rulebook covers all 10 trading roles")
 
 # 12. Participant AML risk ----------------------------------------------------
 section("Participant AML risk")

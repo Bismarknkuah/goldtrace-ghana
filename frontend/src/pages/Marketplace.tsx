@@ -73,7 +73,8 @@ export default function Marketplace() {
     try {
       const r = await buy({ id: l.id, offer_price_ghs: amount }).unwrap();
       setOfferFor(null);
-      setMsg({ type: "success", text: `${r.detail} (${r.batch_code})` });
+      const flags = r.compliance?.review?.length ? ` Flags: ${r.compliance.review.join("; ")}` : "";
+      setMsg({ type: "success", text: `${r.detail} (${r.batch_code})${flags}` });
     } catch (e) { setMsg({ type: "error", text: err(e, "Purchase request failed.") }); }
   };
   const doList = async () => {

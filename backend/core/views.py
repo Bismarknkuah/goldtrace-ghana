@@ -50,7 +50,8 @@ class SystemConfigView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     FIELDS = ("org_name", "tagline", "contact_email", "report_form_title",
               "risk_block_threshold", "risk_review_threshold", "mass_balance_tolerance_pct",
-              "fx_discrepancy_pct", "max_report_attachments")
+              "fx_discrepancy_pct", "max_report_attachments",
+              "price_band_below_pct", "price_band_above_pct")
 
     def _dump(self, c):
         return {f: getattr(c, f) for f in self.FIELDS}

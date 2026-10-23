@@ -227,6 +227,19 @@ def build_provenance(batch, chain: dict, lot_risk: dict) -> dict:
     else:
         reasons_good.append(f"Origin location is on record ({origin['basis'].lower()}).")
 
+    # ---- Responsible sourcing: could it come from illegal mining? -----------
+    try:
+        from gis.sourcing import source_check
+        sourcing = source_check(batch)
+    except Exception:  # pragma: no cover - never let sourcing break tracing
+        sourcing = {"status": "unverified", "message": "Mine-site check unavailable."}
+    if sourcing["status"] == "illegal":
+        reasons_bad.append(sourcing["message"])
+    elif sourcing["status"] in ("outside", "suspect"):
+        reasons_warn.append(sourcing["message"])
+    elif sourcing["status"] == "verified":
+        reasons_good.append(sourcing["message"])
+
     if reasons_bad:
         level, headline = "compromised", "Do not trade — this gold's record cannot be trusted."
     elif reasons_warn or lot_risk.get("band") in ("high", "critical"):
@@ -282,10 +295,15 @@ def build_provenance(batch, chain: dict, lot_risk: dict) -> dict:
          "a": "No — the custody record is intact." if chain["valid"] and batch.security_status == "normal"
               else "Yes — see the security and tamper details below."},
         {"q": "What is it worth?", "a": value["reference_value"] or value["basis"]},
+        {"q": "Could it come from illegal mining (galamsey)?",
+         "a": {"verified": "Unlikely — ", "illegal": "Yes, high risk — ", "outside": "Possibly — ",
+               "suspect": "Possibly — ", "unverified": "Cannot tell — "}.get(sourcing["status"], "")
+              + sourcing["message"]},
     ]
 
     return {"verdict": {"level": level, "headline": headline,
                         "problems": reasons_bad, "warnings": reasons_warn, "assurances": reasons_good},
             "answers": answers, "source": source, "assay": assay,
             "current_owner": current_owner, "owners": holders, "pending_offers": pending,
-            "journey": journey, "trail": trail, "value": value, "position": pos}
+            "journey": journey, "trail": trail, "value": value, "position": pos,
+            "sourcing": sourcing}

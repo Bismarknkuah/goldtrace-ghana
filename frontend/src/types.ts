@@ -264,6 +264,7 @@ export interface Provenance {
   verdict: { level: "trusted" | "caution" | "compromised"; headline: string;
     problems: string[]; warnings: string[]; assurances: string[] };
   answers: { q: string; a: string }[];
+  sourcing?: Sourcing;
   source: { producer: PartyRef | null; licence_number: string | null; licence_status: string | null;
     region: string; district: string | null;
     concession: { code: string; name: string; region: string; area_ha: number; active: boolean } | null;
@@ -340,9 +341,42 @@ export interface IllegalAlert {
   latitude: number; longitude: number; region: string; source: string;
   probability: number; band: "low" | "medium" | "high" | "critical";
   drivers: string[]; status: string | null; maps_link: string;
+  linked_lots?: LinkedLot[];
 }
+export interface LinkedLot { batch_code: string; km: number; gross_weight_g: string; owner: string | null; status: string; }
 export interface IllegalAlerts {
-  summary: { total: number; critical: number; high: number }; alerts: IllegalAlert[];
+  summary: { total: number; critical: number; high: number; linked_lots?: number }; alerts: IllegalAlert[];
+}
+
+export interface LicenceStatus {
+  required: boolean; ok: boolean; label: string; detail: string;
+  licence_number: string | null; expires_at: string | null;
+}
+export interface TradingRole {
+  role: string; label: string; licence: string;
+  sells_to: { role: string; label: string; basis: string }[];
+  buys_from: { role: string; label: string }[];
+}
+export interface TradingRules {
+  roles: TradingRole[]; principles: string[];
+  me: { role: string; label: string; sells_to: string[]; buys_from: string[]; licence: LicenceStatus };
+}
+export interface ComplianceItem {
+  key: string; label: string; ok: boolean; detail: string; action: string | null; link: string | null; weight: number;
+}
+export interface MyCompliance {
+  score: number; level: "good" | "fair" | "poor"; trading_role: boolean;
+  items: ComplianceItem[]; actions: ComplianceItem[];
+}
+export interface Sourcing {
+  status: "verified" | "unverified" | "outside" | "illegal" | "suspect"; message: string;
+  concession?: string | null;
+  nearest_illegal?: { km: number; status: string; lat: number; lng: number } | null;
+}
+export interface GateCheck { check: string; result: "pass" | "fail"; detail: string; }
+export interface ComplianceGate {
+  decision: "allow" | "review" | "block"; summary: string; checks: GateCheck[];
+  blocking: string[]; review: string[]; lot_risk: number; sourcing: Sourcing;
 }
 
 export interface ReportLink { id: string; token: string; title: string; active: boolean; submissions: number; created_at: string; }
@@ -360,4 +394,5 @@ export interface SystemConfig {
   org_name: string; tagline: string; contact_email: string; report_form_title: string;
   risk_block_threshold: number; risk_review_threshold: number; mass_balance_tolerance_pct: number;
   fx_discrepancy_pct: number; max_report_attachments: number;
+  price_band_below_pct: number; price_band_above_pct: number;
 }

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Alert, Box, Button, Card, CardContent, Chip, MenuItem, Stack, Table, TableBody,
   TableCell, TableHead, TableRow, TextField, Typography } from "@mui/material";
-import { useDetectionsQuery, useIngestDetectionMutation, useSetDetectionStatusMutation,
+import { useIllegalMiningAlertsQuery, useDetectionsQuery, useIngestDetectionMutation, useSetDetectionStatusMutation,
   useEnvironmentalRiskQuery } from "../services/api";
 import { useAppSelector } from "../app/hooks";
+import { useNavigate } from "react-router-dom";
 
 const COLOR: Record<string, "success" | "warning" | "error" | "default"> = {
   licensed: "success", unverified: "warning", suspected_illegal: "error", confirmed_illegal: "error", dismissed: "default",
@@ -14,6 +15,9 @@ export default function MiningSites() {
   const canIngest = ["super_admin","ceo","goldbod_officer","env_officer","security_agency"].includes(role);
   const { data } = useDetectionsQuery();
   const { data: env } = useEnvironmentalRiskQuery();
+  const { data: alerts } = useIllegalMiningAlertsQuery();
+  const navigate = useNavigate();
+  const linked = (alerts?.alerts ?? []).filter((a) => (a.linked_lots?.length ?? 0) > 0);
   const [ingest, { isLoading }] = useIngestDetectionMutation();
   const [setStatus] = useSetDetectionStatusMutation();
   const [f, setF] = useState({ latitude: "", longitude: "", region: "", source: "satellite", confidence: "0.8", operator_name: "" });
@@ -110,6 +114,33 @@ export default function MiningSites() {
           </TableBody>
         </Table>
       </Card>
+      <Card><CardContent>
+        <Typography variant="h6">Gold traced to illegal-mining locations</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Gold lots whose recorded mine-site origin lies within 3 km of a predicted or detected illegal site.
+          Hold and trace them first. Any attempt to sell gold from a confirmed illegal site is blocked automatically.
+        </Typography>
+        {linked.length === 0 && <Typography variant="body2" color="text.secondary">
+          No registered gold lot originates near an alerted site.</Typography>}
+        <Stack spacing={1.5}>
+          {linked.map((a, i) => (
+            <Box key={i} sx={{ p: 1.5, borderRadius: 1.5, border: "1px solid #E0B4AE", bgcolor: "#FBF3F1" }}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", mb: 0.75 }}>
+                <Chip size="small" color={a.band === "critical" ? "error" : "warning"} label={`${Math.round(a.probability * 100)}% ${a.band}`} />
+                <Typography className="mono" sx={{ fontSize: 13 }}>{a.latitude.toFixed(5)}, {a.longitude.toFixed(5)}</Typography>
+                <Typography variant="body2" color="text.secondary">{a.region}</Typography>
+                <a href={a.maps_link} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "#7A6A2E" }}>Open location ↗</a>
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+                {a.linked_lots!.map((l) => (
+                  <Chip key={l.batch_code} clickable onClick={() => navigate(`/track?code=${l.batch_code}`)}
+                    label={`${l.batch_code} · ${l.km} km · ${l.gross_weight_g} g · ${l.owner ?? "no owner"}`} />
+                ))}
+              </Stack>
+            </Box>
+          ))}
+        </Stack>
+      </CardContent></Card>
     </Stack>
   );
 }

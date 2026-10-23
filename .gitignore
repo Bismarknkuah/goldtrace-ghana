@@ -28,7 +28,3 @@ npm-debug.log*
 # ---- Editor / OS ----
 .DS_Store
 Thumbs.db
-backend/.env
-mobile/.env
-frontend/.env
-**/node_modules/

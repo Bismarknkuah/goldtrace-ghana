@@ -159,69 +159,96 @@ def compute_lot_risk(batch, chain: dict | None = None) -> dict:
     return {**parts, "overall": overall, "band": band}
 
 
-def precheck_transaction(batch, buyer) -> dict:
-    """Pre-transaction compliance gate (vision section 6): run checks before a
-    purchase and return a decision of allow / review / block with reasons."""
-    from core.supply_chain import resolve_stage
-    from licensing.models import License, LicenseStatus
+def precheck_transaction(batch, buyer, price=None) -> dict:
+    """GoldBod pre-transaction compliance gate.
 
-    checks = []
-    blocking = []
-    review = []
+    Runs every legal and risk check before a purchase and returns
+    allow / review / block, each check with a plain-language explanation.
+    """
+    from decimal import Decimal
 
-    def ok(label):
-        checks.append({"check": label, "result": "pass"})
+    from core.models import SystemConfig
+    from core.supply_chain import explain, licence_status, resolve_stage
+    from gis.sourcing import source_check
+    from pricing.services import current_rate
 
-    def fail(label, hard):
-        checks.append({"check": label, "result": "fail"})
-        (blocking if hard else review).append(label)
+    checks, blocking, review = [], [], []
+
+    def add(label, result, detail, hard=False):
+        checks.append({"check": label, "result": result, "detail": detail})
+        if result == "fail":
+            (blocking if hard else review).append(f"{label}: {detail}")
 
     seller = batch.current_owner
-
-    # Flow eligibility
-    if seller:
-        _stage, eligible = resolve_stage(seller.role, buyer.role)
-        ok("Supply-chain flow eligible") if eligible or buyer.is_superuser \
-            else fail("Buyer not permitted to buy from this seller", True)
-
-    # Buyer licence
-    buyer_lic = License.objects.filter(holder=buyer).order_by("-created_at").first()
-    if buyer_lic and buyer_lic.status == LicenseStatus.ACTIVE and buyer_lic.is_valid:
-        ok("Buyer licence active")
-    elif buyer_lic and buyer_lic.status in (LicenseStatus.SUSPENDED, LicenseStatus.REVOKED):
-        fail(f"Buyer licence {buyer_lic.get_status_display().lower()}", True)
-    else:
-        fail("Buyer has no valid licence", False)
-
-    # Seller / miner licence
-    seller_lic = License.objects.filter(holder=seller).order_by("-created_at").first() if seller else None
-    if seller_lic and seller_lic.status in (LicenseStatus.SUSPENDED, LicenseStatus.REVOKED):
-        fail(f"Seller licence {seller_lic.get_status_display().lower()}", True)
-    else:
-        ok("Seller licence in good standing")
-
-    # Gold security status / investigation
-    if batch.security_status in ("stolen", "missing"):
-        fail("Gold is reported stolen/missing", True)
-    elif batch.security_status == "flagged":
-        fail("Gold is under a security flag", False)
-    else:
-        ok("No active security flag")
-
-    # Assay present
-    ok("Gold has been assayed") if getattr(batch, "fineness", None) else fail("Gold not yet assayed", False)
-
-    # Lot risk
-    from core.models import SystemConfig
     cfg = SystemConfig.get()
-    risk = compute_lot_risk(batch)
-    if risk["overall"] >= cfg.risk_block_threshold:
-        fail(f"Lot risk critical ({risk['overall']}/100)", True)
-    elif risk["overall"] >= cfg.risk_review_threshold:
-        fail(f"Lot risk high ({risk['overall']}/100)", False)
+
+    # 1. Who may sell to whom (Act 1140 trading order).
+    if seller:
+        _stage, permitted = resolve_stage(seller.role, buyer.role)
+        add("Permitted trade", "pass" if permitted else "fail",
+            explain(seller.role, buyer.role), hard=True)
+
+    # 2. Licences — buyer and seller must both be licensed for their tier.
+    for who, user in (("Buyer", buyer), ("Seller", seller)):
+        if user is None:
+            continue
+        lic = licence_status(user)
+        if lic["required"]:
+            add(f"{who} licence", "pass" if lic["ok"] else "fail", lic["detail"], hard=True)
+
+    # 3. Security status.
+    if batch.security_status in ("stolen", "missing"):
+        add("Security", "fail", f"The gold is reported {batch.security_status}.", hard=True)
+    elif batch.security_status == "flagged":
+        add("Security", "fail", "The gold carries a security flag under investigation.")
     else:
-        ok(f"Lot risk acceptable ({risk['overall']}/100)")
+        add("Security", "pass", "No theft, loss or tamper flag.")
+
+    # 4. Custody record integrity.
+    chain = verify_chain(batch)
+    add("Custody record", "pass" if chain["valid"] else "fail",
+        "Tamper-evident custody record intact." if chain["valid"]
+        else "The custody record is broken — history cannot be trusted.", hard=not chain["valid"])
+
+    # 5. Assay.
+    add("Assay", "pass" if batch.fineness else "fail",
+        f"Purity on record: {batch.fineness / 10:.1f}%." if batch.fineness
+        else "Purity has not been assayed — value cannot be fixed.")
+
+    # 6. Responsible sourcing — is the mine site legitimate?
+    src = source_check(batch)
+    hard_src = src["status"] == "illegal"
+    add("Mine-site origin", "pass" if src["status"] == "verified" else "fail",
+        src["message"], hard=hard_src)
+
+    # 7. Price vs Bank of Ghana reference rate.
+    if price:
+        fine = batch.fine_weight_g or (
+            Decimal(str(batch.gross_weight_g)) * Decimal(batch.fineness) / 1000 if batch.fineness else None)
+        if fine:
+            ref = Decimal(str(fine)) * current_rate()
+            pct = float((Decimal(str(price)) - ref) / ref * 100) if ref else 0.0
+            low, high = cfg.price_band_below_pct, cfg.price_band_above_pct
+            ok = -low <= pct <= high
+            add("Price vs BoG reference", "pass" if ok else "fail",
+                (f"Price is {abs(pct):.1f}% {'below' if pct < 0 else 'above'} the reference value "
+                 f"of GHS {ref:,.2f}" + ("." if ok else
+                 f" — outside the allowed band (−{low:g}% to +{high:g}%). "
+                 + ("Possible under-payment of the miner." if pct < 0 else "Possible value inflation / laundering."))))
+
+    # 8. Overall lot risk.
+    risk = compute_lot_risk(batch, chain)
+    if risk["overall"] >= cfg.risk_block_threshold:
+        add("Lot risk", "fail", f"Risk score {risk['overall']}/100 is critical.", hard=True)
+    elif risk["overall"] >= cfg.risk_review_threshold:
+        add("Lot risk", "fail", f"Risk score {risk['overall']}/100 is high.")
+    else:
+        add("Lot risk", "pass", f"Risk score {risk['overall']}/100.")
 
     decision = "block" if blocking else ("review" if review else "allow")
-    return {"decision": decision, "checks": checks,
-            "blocking": blocking, "review": review, "lot_risk": risk["overall"]}
+    summary = {"block": "This trade is not permitted.",
+               "review": "This trade may proceed only after a GoldBod officer reviews it.",
+               "allow": "All GoldBod checks passed."}[decision]
+    return {"decision": decision, "summary": summary, "checks": checks,
+            "blocking": blocking, "review": review, "lot_risk": risk["overall"],
+            "sourcing": src}

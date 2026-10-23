@@ -10,6 +10,7 @@ import type {
   ParticipantRisk, CurrentRate, AdminUser, OperatorLocation, Transparency,
   CertVerify, ExportCertificate, GoldBatch, Miner,
   OwnershipTransfer, Paginated, Passport, User,
+  TradingRules, MyCompliance, ComplianceGate,
 } from "../types";
 
 // Priority: an explicit VITE_API_URL (set in Vercel) wins; otherwise a production
@@ -327,7 +328,10 @@ export const api = createApi({
       query: (id) => ({ url: `/production/batches/${id}/unlist/`, method: "POST" }),
       invalidatesTags: ["Market", "Batch"],
     }),
-    buyBatch: b.mutation<{ detail: string; batch_code: string }, { id: string; offer_price_ghs?: string }>({
+    tradingRules: b.query<TradingRules, void>({ query: () => "/trading/rules/" }),
+    myCompliance: b.query<MyCompliance, void>({ query: () => "/trading/my-compliance/",
+      providesTags: ["Batch", "Transfer", "License"] }),
+    buyBatch: b.mutation<{ detail: string; batch_code: string; compliance?: ComplianceGate }, { id: string; offer_price_ghs?: string }>({
       query: ({ id, offer_price_ghs }) => ({ url: `/production/batches/${id}/buy/`, method: "POST",
         body: offer_price_ghs ? { offer_price_ghs } : {} }),
       invalidatesTags: ["Market", "Batch", "Receipt", "Transfer"],
@@ -357,7 +361,7 @@ export const {
   useAssignCourierMutation, useDeliveryActionMutation, useTrackDeliveryQuery,
   usePostCourierPingMutation, useReceiptsQuery,
   useHandoverDeliveryMutation, useRiskOverviewQuery, useAnomaliesQuery, useRevenueOverviewQuery,
-  useTrackGoldQuery, useGoldLookupQuery, useSecurityOverviewQuery, useReportIncidentMutation,
+  useTrackGoldQuery, useGoldLookupQuery, useTradingRulesQuery, useMyComplianceQuery, useSecurityOverviewQuery, useReportIncidentMutation,
   useResolveIncidentMutation, useCompaniesQuery,
   useLicensesQuery, useCreateLicenseMutation, useLicenseActionMutation, useRegistryLookupQuery,
   useRequestRenewalMutation,
