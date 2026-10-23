@@ -157,7 +157,6 @@ export interface TrackGold {
   open_incidents: TrackIncident[];
   custody_chain: CustodyEvent[];
   lot_risk?: LotRisk;
-  provenance?: Provenance;
 }
 export interface LotRisk {
   origin: number; transaction: number; assay: number; custody: number;
@@ -236,53 +235,8 @@ export interface Transparency {
 
 export interface MarketListing {
   id: string; batch_code: string; gross_weight_g: string; fine_weight_g: string | null;
-  fineness: number | null; assayed: boolean; asking_price_ghs: string;
-  price_per_gram: string | null; reference_value_ghs: string | null;
-  price_vs_reference_pct: number | null; region: string; district: string;
-  concession: string | null; has_gps_origin: boolean; is_aggregated: boolean;
-  source_lot_count: number; seller: string; seller_name: string; seller_role: string;
-  producer_licence: string | null; producer_licence_status: string | null;
-  security_status: string; chain_valid: boolean; risk_score: number;
-  trade_rule?: string; who_can_buy?: string[];
-  risk_band: "low" | "medium" | "high" | "critical"; listed_at: string; seal_number: string | null;
-}
-export interface MarketResponse {
-  listings: MarketListing[]; regions: string[];
-  me?: { role: string; can_buy_from: string[]; can_sell_to: string[] };
-  summary: { count: number; total_weight_g: string; avg_price_per_gram: string | null;
-    reference_rate_ghs_per_g: string };
-}
-export interface MarketFilters {
-  q?: string; region?: string; min_weight?: string; max_weight?: string;
-  min_fineness?: string; assayed?: string; max_risk?: string; sort?: string;
-}
-export interface LookupResult {
-  batch_code: string; region: string; gross_weight_g: string; status: string;
-  security_status: string; owner: string | null;
-}
-export interface PartyRef { name: string; username: string; role: string; region: string; }
-export interface GeoPoint { lat: number; lng: number; basis?: string; label?: string; kind?: string; }
-export interface Provenance {
-  verdict: { level: "trusted" | "caution" | "compromised"; headline: string;
-    problems: string[]; warnings: string[]; assurances: string[] };
-  answers: { q: string; a: string }[];
-  sourcing?: Sourcing;
-  source: { producer: PartyRef | null; licence_number: string | null; licence_status: string | null;
-    region: string; district: string | null;
-    concession: { code: string; name: string; region: string; area_ha: number; active: boolean } | null;
-    origin: GeoPoint | null; registered_at: string; registered_by: PartyRef | null;
-    aggregated_from: string[] };
-  assay: { certificate_no: string; assayer: PartyRef | null; method: string; gross_weight_g: string;
-    fine_weight_g: string; fineness: number; purity_pct: number; at: string } | null;
-  current_owner: (PartyRef & { since: string | null }) | null;
-  owners: { holder: PartyRef | null; acquired_at: string; until: string | null; how: string;
-    price: string | null; receipt: string | null; irregular: boolean; current: boolean }[];
-  pending_offers: { buyer: string; offer: string | null; at: string }[];
-  journey: { at: string; kind: string; title: string; sentence: string; actor: string | null;
-    place: GeoPoint | null; ok: boolean }[];
-  trail: GeoPoint[];
-  position: GeoPoint | null;
-  value: { reference_rate: string | null; fine_weight: string | null; reference_value: string | null; basis: string };
+  fineness: number | null; asking_price_ghs: string; seller: string; seller_role: string;
+  security_status: string;
 }
 
 export interface Anomaly {
@@ -343,42 +297,9 @@ export interface IllegalAlert {
   latitude: number; longitude: number; region: string; source: string;
   probability: number; band: "low" | "medium" | "high" | "critical";
   drivers: string[]; status: string | null; maps_link: string;
-  linked_lots?: LinkedLot[];
 }
-export interface LinkedLot { batch_code: string; km: number; gross_weight_g: string; owner: string | null; status: string; }
 export interface IllegalAlerts {
-  summary: { total: number; critical: number; high: number; linked_lots?: number }; alerts: IllegalAlert[];
-}
-
-export interface LicenceStatus {
-  required: boolean; ok: boolean; label: string; detail: string;
-  licence_number: string | null; expires_at: string | null;
-}
-export interface TradingRole {
-  role: string; label: string; licence: string;
-  sells_to: { role: string; label: string; basis: string }[];
-  buys_from: { role: string; label: string }[];
-}
-export interface TradingRules {
-  roles: TradingRole[]; principles: string[];
-  me: { role: string; label: string; sells_to: string[]; buys_from: string[]; licence: LicenceStatus };
-}
-export interface ComplianceItem {
-  key: string; label: string; ok: boolean; detail: string; action: string | null; link: string | null; weight: number;
-}
-export interface MyCompliance {
-  score: number; level: "good" | "fair" | "poor"; trading_role: boolean;
-  items: ComplianceItem[]; actions: ComplianceItem[];
-}
-export interface Sourcing {
-  status: "verified" | "unverified" | "outside" | "illegal" | "suspect"; message: string;
-  concession?: string | null;
-  nearest_illegal?: { km: number; status: string; lat: number; lng: number } | null;
-}
-export interface GateCheck { check: string; result: "pass" | "fail"; detail: string; }
-export interface ComplianceGate {
-  decision: "allow" | "review" | "block"; summary: string; checks: GateCheck[];
-  blocking: string[]; review: string[]; lot_risk: number; sourcing: Sourcing;
+  summary: { total: number; critical: number; high: number }; alerts: IllegalAlert[];
 }
 
 export interface ReportLink { id: string; token: string; title: string; active: boolean; submissions: number; created_at: string; }
@@ -396,5 +317,4 @@ export interface SystemConfig {
   org_name: string; tagline: string; contact_email: string; report_form_title: string;
   risk_block_threshold: number; risk_review_threshold: number; mass_balance_tolerance_pct: number;
   fx_discrepancy_pct: number; max_report_attachments: number;
-  price_band_below_pct: number; price_band_above_pct: number;
 }

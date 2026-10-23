@@ -11,7 +11,6 @@ from accounts.models import REGULATOR_ROLES, Role
 from core.scoping import scope_batches
 from miners.models import Miner
 
-from .provenance import build_provenance
 from .models import Assay, BatchStatus, CustodyEventType, GoldBatch, SecurityStatus
 from .serializers import AssaySerializer, GoldBatchSerializer, PassportSerializer
 from .services import (
@@ -76,25 +75,12 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
     def track(self, request):
         """Track any single gold: passport, custody chain, live location, security."""
         from .serializers import CustodyEventSerializer
-        from django.db.models import Q
-
-        from trading.models import OwnershipTransfer
-        code = (request.query_params.get("code", "") or "").strip().upper()
-        base = GoldBatch.objects.select_related(
-            "miner__user", "concession", "current_owner", "created_by"
-        ).prefetch_related("custody_events", "deliveries", "incidents")
-        # Visible = within the user's scope, or a lot they once bought or sold.
-        party_ids = OwnershipTransfer.objects.filter(
-            Q(seller=request.user) | Q(buyer=request.user)).values_list("batch_id", flat=True)
-        batch = (scope_batches(base, request.user).filter(batch_code=code).first()
-                 or base.filter(batch_code=code, id__in=list(party_ids)).first())
-        if batch is None:
-            if base.filter(batch_code=code).exists():
-                return Response({"detail": "This gold exists but is outside your access. "
-                                 "Use Verify passport for the public provenance check."}, status=403)
-            return Response({"detail": f"No gold found with code {code}."}, status=404)
+        code = request.query_params.get("code", "")
+        batch = get_object_or_404(
+            GoldBatch.objects.select_related("miner", "concession", "current_owner")
+            .prefetch_related("custody_events", "deliveries", "incidents"),
+            batch_code=code)
         chain = verify_chain(batch)
-        lot_risk = compute_lot_risk(batch, chain)
         delivery = batch.deliveries.order_by("-created_at").first()
         location = None
         if delivery and delivery.courier_lat is not None:
@@ -157,8 +143,7 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
             "open_incidents": open_incidents,
             "custody_chain": CustodyEventSerializer(
                 batch.custody_events.order_by("created_at"), many=True).data,
-            "lot_risk": lot_risk,
-            "provenance": build_provenance(batch, chain, lot_risk),
+            "lot_risk": compute_lot_risk(batch, chain),
         })
 
     @extend_schema(tags=["production"], responses=OpenApiTypes.OBJECT)
@@ -179,7 +164,7 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
 
         # Concession + miner (source)
         if batch.concession_id:
-            node(f"con-{batch.concession_id}", batch.concession.code,
+            node(f"con-{batch.concession_id}", batch.concession.reference,
                  "concession", "source", "Licensed concession")
         node(f"miner-{batch.miner_id}", batch.miner.license_number, "miner", "source",
              f"{batch.miner.region or ''}")
@@ -237,13 +222,8 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
     @extend_schema(tags=["production"], responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=["get"])
     def compliance_check(self, request, pk=None):
-        """Preview the pre-transaction compliance gate for the current user (?price=GHS)."""
-        price = request.query_params.get("price") or None
-        try:
-            price = float(price) if price else None
-        except ValueError:
-            price = None
-        return Response(precheck_transaction(self.get_object(), request.user, price=price))
+        """Preview the pre-transaction compliance gate for the current user."""
+        return Response(precheck_transaction(self.get_object(), request.user))
 
     @extend_schema(tags=["production"], responses=OpenApiTypes.OBJECT)
     @action(detail=False, methods=["post"])
@@ -306,178 +286,42 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
                          "message": "Reconciled." if ok else
                          "MASS-BALANCE ANOMALY — a fraud case has been raised."})
 
-    @extend_schema(tags=["production"], responses=OpenApiTypes.OBJECT)
-    @action(detail=False, methods=["get"])
-    def lookup(self, request):
-        """Search gold the user can trace, by code, region or producer licence."""
-        q = (request.query_params.get("q") or "").strip()
-        qs = self.get_queryset().select_related("miner", "current_owner").order_by("-updated_at")
-        if q:
-            from django.db.models import Q
-            qs = qs.filter(Q(batch_code__icontains=q) | Q(miner__region__icontains=q)
-                           | Q(miner__license_number__icontains=q))
-        out = [{"batch_code": b.batch_code, "region": b.miner.region if b.miner else "",
-                "gross_weight_g": str(b.gross_weight_g), "status": b.get_status_display(),
-                "security_status": b.security_status,
-                "owner": b.current_owner.username if b.current_owner else None}
-               for b in qs[:12]]
-        return Response({"results": out})
-
     # ---- Marketplace: role-restricted buy/sell of gold ----
     @extend_schema(tags=["production"])
     @action(detail=False, methods=["get"])
     def marketplace(self, request):
-        """Listed gold this user may buy under the GoldBod flow, with provenance,
-        price-vs-reference, risk and filters/sorting.
-
-        Query params: q, region, min_weight, max_weight, min_fineness, assayed,
-        max_risk (low|medium|high), sort (newest|price_asc|price_desc|weight_desc|
-        purity_desc|best_value)."""
-        from decimal import Decimal
-
-        from core.supply_chain import FLOW, ROLE_LABEL, may_buy_from, resolve_stage
-        from pricing.services import current_rate
-
+        """Listed batches THIS user may buy under the GoldBod flow
+        (miner->tier1->tier2->aggregator->GoldBod->export)."""
+        from core.supply_chain import resolve_stage
         user = request.user
-        p = request.query_params
-        rate = current_rate()
-        q = (p.get("q") or "").strip().lower()
-        region = (p.get("region") or "").strip().lower()
-
-        def num(key):
-            try:
-                return Decimal(p.get(key)) if p.get(key) not in (None, "") else None
-            except Exception:
-                return None
-
-        min_w, max_w, min_f = num("min_weight"), num("max_weight"), num("min_fineness")
-        risk_cap = {"low": 25, "medium": 45, "high": 70}.get(p.get("max_risk") or "")
         listings = (GoldBatch.objects.filter(listed_for_sale=True)
-                    .select_related("miner", "concession", "current_owner").order_by("-updated_at"))
-        out, regions = [], set()
+                    .select_related("miner", "current_owner").order_by("-updated_at"))
+        out = []
         for b in listings:
             owner = b.current_owner
-            if not owner or owner.id == user.id or b.security_status in ("stolen", "missing"):
+            if not owner or owner.id == user.id:
                 continue
             _stage, eligible = resolve_stage(owner.role, user.role)
             if not (eligible or user.is_superuser):
                 continue
-            reg = b.miner.region if b.miner else ""
-            regions.add(reg)
-            gross = Decimal(str(b.gross_weight_g))
-            fine = (Decimal(str(b.fine_weight_g)) if b.fine_weight_g else
-                    (gross * Decimal(b.fineness) / 1000 if b.fineness else None))
-            ask = Decimal(str(b.asking_price_ghs or 0))
-            ref_value = (fine * rate) if fine else None
-            vs_ref = (float((ask - ref_value) / ref_value * 100) if ref_value and ask else None)
-            chain = verify_chain(b)
-            risk = compute_lot_risk(b, chain)
-            seller_name = f"{owner.first_name} {owner.last_name}".strip() or owner.username
-            rule = FLOW.get(owner.role, {}).get(user.role)
-            row = {
-                "trade_rule": rule[1] if rule else "Oversight view",
-                "who_can_buy": [ROLE_LABEL.get(r, r) for r in FLOW.get(owner.role, {})],
+            out.append({
                 "id": str(b.id), "batch_code": b.batch_code,
                 "gross_weight_g": str(b.gross_weight_g),
-                "fine_weight_g": f"{fine:.3f}" if fine else None,
-                "fineness": b.fineness, "assayed": bool(b.fine_weight_g),
-                "asking_price_ghs": str(ask),
-                "price_per_gram": f"{(ask / gross):.2f}" if gross and ask else None,
-                "reference_value_ghs": f"{ref_value:.2f}" if ref_value else None,
-                "price_vs_reference_pct": round(vs_ref, 1) if vs_ref is not None else None,
-                "region": reg, "district": b.miner.district if b.miner else "",
-                "concession": b.concession.code if b.concession_id else None,
-                "has_gps_origin": b.origin_latitude is not None,
-                "is_aggregated": b.is_aggregated, "source_lot_count": len(b.source_lots or []),
-                "seller": owner.username, "seller_name": seller_name,
-                "seller_role": owner.get_role_display(),
-                "producer_licence": b.miner.license_number if b.miner else None,
-                "producer_licence_status": b.miner.license_status if b.miner else None,
-                "security_status": b.security_status, "chain_valid": chain["valid"],
-                "risk_score": risk["overall"], "risk_band": risk["band"],
-                "listed_at": b.updated_at, "seal_number": b.seal_number or None,
-            }
-            hay = " ".join(str(x) for x in (b.batch_code, reg, row["district"], seller_name,
-                                            owner.username, row["concession"] or "")).lower()
-            if q and q not in hay:
-                continue
-            if region and reg.lower() != region:
-                continue
-            if min_w is not None and gross < min_w:
-                continue
-            if max_w is not None and gross > max_w:
-                continue
-            if min_f is not None and (b.fineness or 0) < min_f:
-                continue
-            if p.get("assayed") in ("1", "true") and not row["assayed"]:
-                continue
-            if risk_cap is not None and risk["overall"] >= risk_cap:
-                continue
-            out.append(row)
-
-        sort = p.get("sort") or "newest"
-        keyf = {
-            "price_asc": lambda r: Decimal(r["asking_price_ghs"]),
-            "price_desc": lambda r: -Decimal(r["asking_price_ghs"]),
-            "weight_desc": lambda r: -Decimal(r["gross_weight_g"]),
-            "purity_desc": lambda r: -(r["fineness"] or 0),
-            "best_value": lambda r: (r["price_vs_reference_pct"]
-                                     if r["price_vs_reference_pct"] is not None else 1e9),
-        }.get(sort)
-        if keyf:
-            out.sort(key=keyf)
-        total_w = sum(Decimal(r["gross_weight_g"]) for r in out)
-        priced = [Decimal(r["price_per_gram"]) for r in out if r["price_per_gram"]]
-        summary = {
-            "count": len(out), "total_weight_g": f"{total_w:.3f}",
-            "avg_price_per_gram": f"{(sum(priced) / len(priced)):.2f}" if priced else None,
-            "reference_rate_ghs_per_g": f"{rate:.2f}",
-        }
-        me = {"role": ROLE_LABEL.get(user.role, user.role),
-              "can_buy_from": [ROLE_LABEL.get(r, r) for r in may_buy_from(user.role)],
-              "can_sell_to": [ROLE_LABEL.get(r, r) for r in FLOW.get(user.role, {})]}
-        return Response({"listings": out, "summary": summary, "me": me,
-                         "regions": sorted(r for r in regions if r)})
+                "fine_weight_g": str(b.fine_weight_g) if b.fine_weight_g else None,
+                "fineness": b.fineness, "asking_price_ghs": str(b.asking_price_ghs or 0),
+                "seller": owner.username, "seller_role": owner.get_role_display(),
+                "security_status": b.security_status,
+            })
+        return Response({"listings": out})
 
     @extend_schema(tags=["production"])
     @action(detail=True, methods=["post"])
     def list_for_sale(self, request, pk=None):
-        from decimal import Decimal, InvalidOperation
-
-        from core.models import SystemConfig
-        from core.supply_chain import FLOW, ROLE_LABEL, licence_status
-        from pricing.services import current_rate
-
         batch = self.get_object()
-        user = request.user
-        if batch.current_owner_id != user.id and not user.is_superuser:
+        if batch.current_owner_id != request.user.id and not request.user.is_superuser:
             return Response({"detail": "Only the current owner can list this gold."}, status=403)
-        owner = batch.current_owner
-        if owner and not FLOW.get(owner.role):
-            return Response({"detail": f"{ROLE_LABEL.get(owner.role, owner.role)}s may not resell gold "
-                             "under GoldBod rules."}, status=403)
-        lic = licence_status(owner) if owner else {"required": False}
-        if lic["required"] and not lic["ok"]:
-            return Response({"detail": f"You cannot sell without a valid licence: {lic['detail']}"},
-                            status=403)
-        if batch.security_status in ("stolen", "missing", "flagged"):
-            return Response({"detail": f"This gold is {batch.security_status} and cannot be listed "
-                             "until GoldBod security clears it."}, status=403)
-        price = request.data.get("asking_price_ghs")
-        if price not in (None, ""):
-            try:
-                price_d = Decimal(str(price))
-            except InvalidOperation:
-                return Response({"detail": "Asking price must be a number."}, status=400)
-            fine = batch.fine_weight_g or (
-                Decimal(str(batch.gross_weight_g)) * Decimal(batch.fineness) / 1000 if batch.fineness else None)
-            if fine:
-                cap = Decimal(str(fine)) * current_rate() * (1 + Decimal(str(SystemConfig.get().price_band_above_pct)) / 100)
-                if price_d > cap:
-                    return Response({"detail": f"Asking price GHS {price_d:,.2f} is above the GoldBod price cap "
-                                     f"of GHS {cap:,.2f} for this lot. Licensed traders may not sell above "
-                                     "GoldBod's published price."}, status=400)
         batch.listed_for_sale = True
+        price = request.data.get("asking_price_ghs")
         if price not in (None, ""):
             batch.asking_price_ghs = price
         if request.data.get("seal_number"):
@@ -501,7 +345,7 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
         """Eligible buyer purchases a listed batch: ownership moves, receipt issued."""
         from decimal import Decimal
 
-        from core.supply_chain import explain, resolve_stage
+        from core.supply_chain import resolve_stage
         from trading.models import OwnershipTransfer, TransferStatus
 
         batch = self.get_object()
@@ -513,24 +357,15 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
             return Response({"detail": "You already own this gold."}, status=400)
         stage, eligible = resolve_stage(seller.role, buyer.role)
         if not (eligible or buyer.is_superuser):
-            return Response({"detail": explain(seller.role, buyer.role), "rule": "trading_order"},
-                            status=403)
-        price = batch.asking_price_ghs or Decimal("0")
-        offer = request.data.get("offer_price_ghs")
-        if offer not in (None, ""):
-            try:
-                offer = Decimal(str(offer))
-            except Exception:
-                return Response({"detail": "Offer price must be a number."}, status=400)
-            if offer <= 0:
-                return Response({"detail": "Offer price must be greater than zero."}, status=400)
-            price = offer
-        # Pre-transaction GoldBod compliance gate (rules, licences, origin, price band, risk).
-        gate = precheck_transaction(batch, buyer, price=price or None)
+            return Response({"detail": "Your role is not permitted to buy from this seller "
+                             "under the GoldBod supply-chain flow."}, status=403)
+        # Pre-transaction compliance gate.
+        gate = precheck_transaction(batch, buyer)
         if gate["decision"] == "block":
-            return Response({"detail": "Purchase blocked: " + "; ".join(gate["blocking"]),
+            return Response({"detail": "Purchase blocked by compliance checks.",
                              "compliance": gate}, status=403)
         needs_review = gate["decision"] == "review"
+        price = batch.asking_price_ghs or Decimal("0")
         existing = OwnershipTransfer.objects.filter(
             batch=batch, buyer=buyer, status=TransferStatus.PENDING).first()
         if existing:

@@ -3,14 +3,13 @@ import type { RootState } from "../app/store";
 import { setTokens, logout } from "../features/authSlice";
 import type { FeatureCollection } from "geojson";
 import type {
-  MarketResponse, MarketFilters, LookupResult, AnomalyFeed, ComplianceMap, BatchGraph, Recommendations, FxReconciliation, EnvRisk, Detection, IllegalAlerts, ReportLink, PublicReport, Position, SystemConfig,
+  MarketListing, AnomalyFeed, ComplianceMap, BatchGraph, Recommendations, FxReconciliation, EnvRisk, Detection, IllegalAlerts, ReportLink, PublicReport, Position, SystemConfig,
   Candidate, Courier, Delivery, Receipt, TrackPayload, RiskOverview, RevenueOverview,
   TrackGold, SecurityOverview, SecurityIncident, MiningCompany,
   License, RegistryResult, KycScreening, DueDiligence, ComplianceOverview,
   ParticipantRisk, CurrentRate, AdminUser, OperatorLocation, Transparency,
   CertVerify, ExportCertificate, GoldBatch, Miner,
   OwnershipTransfer, Paginated, Passport, User,
-  TradingRules, MyCompliance, ComplianceGate,
 } from "../types";
 
 // Priority: an explicit VITE_API_URL (set in Vercel) wins; otherwise a production
@@ -307,18 +306,8 @@ export const api = createApi({
       invalidatesTags: ["Batch"],
     }),
     transparency: b.query<Transparency, void>({ query: () => "/revenue/transparency/" }),
-    marketplace: b.query<MarketResponse, MarketFilters | void>({
-      query: (f) => {
-        const params = new URLSearchParams();
-        Object.entries(f ?? {}).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
-        const qs = params.toString();
-        return `/production/batches/marketplace/${qs ? `?${qs}` : ""}`;
-      },
-      providesTags: ["Market"],
-    }),
-    goldLookup: b.query<{ results: LookupResult[] }, string>({
-      query: (q) => `/production/batches/lookup/?q=${encodeURIComponent(q)}`,
-      providesTags: ["Batch"],
+    marketplace: b.query<{ listings: MarketListing[] }, void>({
+      query: () => "/production/batches/marketplace/", providesTags: ["Market"],
     }),
     listForSale: b.mutation<unknown, { id: string; asking_price_ghs: string; seal_number?: string }>({
       query: ({ id, ...body }) => ({ url: `/production/batches/${id}/list_for_sale/`, method: "POST", body }),
@@ -328,12 +317,8 @@ export const api = createApi({
       query: (id) => ({ url: `/production/batches/${id}/unlist/`, method: "POST" }),
       invalidatesTags: ["Market", "Batch"],
     }),
-    tradingRules: b.query<TradingRules, void>({ query: () => "/trading/rules/" }),
-    myCompliance: b.query<MyCompliance, void>({ query: () => "/trading/my-compliance/",
-      providesTags: ["Batch", "Transfer", "License"] }),
-    buyBatch: b.mutation<{ detail: string; batch_code: string; compliance?: ComplianceGate }, { id: string; offer_price_ghs?: string }>({
-      query: ({ id, offer_price_ghs }) => ({ url: `/production/batches/${id}/buy/`, method: "POST",
-        body: offer_price_ghs ? { offer_price_ghs } : {} }),
+    buyBatch: b.mutation<{ detail: string; batch_code: string }, string>({
+      query: (id) => ({ url: `/production/batches/${id}/buy/`, method: "POST" }),
       invalidatesTags: ["Market", "Batch", "Receipt", "Transfer"],
     }),
     clearSecurity: b.mutation<{ detail: string; security_status: string }, { id: string; note?: string }>({
@@ -361,7 +346,7 @@ export const {
   useAssignCourierMutation, useDeliveryActionMutation, useTrackDeliveryQuery,
   usePostCourierPingMutation, useReceiptsQuery,
   useHandoverDeliveryMutation, useRiskOverviewQuery, useAnomaliesQuery, useRevenueOverviewQuery,
-  useTrackGoldQuery, useGoldLookupQuery, useTradingRulesQuery, useMyComplianceQuery, useSecurityOverviewQuery, useReportIncidentMutation,
+  useTrackGoldQuery, useSecurityOverviewQuery, useReportIncidentMutation,
   useResolveIncidentMutation, useCompaniesQuery,
   useLicensesQuery, useCreateLicenseMutation, useLicenseActionMutation, useRegistryLookupQuery,
   useRequestRenewalMutation,

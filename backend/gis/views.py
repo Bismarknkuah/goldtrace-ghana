@@ -155,13 +155,12 @@ class DetectedMiningSiteViewSet(viewsets.ModelViewSet):
             obj = serializer.save(status=DetectionStatus.LICENSED, matched_concession=match)
         else:
             obj = serializer.save(status=DetectionStatus.SUSPECTED_ILLEGAL)
-            src = "public report" if obj.source == "public_report" else obj.source
             Hotspot.objects.create(
-                title=(f"Suspected illegal mining — {obj.region or 'unknown region'} "
-                       f"({src}, {obj.confidence:.0%})")[:160],
-                latitude=lat, longitude=lng, region=obj.region, source=obj.source,
+                title=f"Satellite: suspected illegal mining ({obj.region or 'unknown region'})",
+                latitude=lat, longitude=lng, region=obj.region,
                 severity=Severity.HIGH if (obj.confidence or 0) >= 0.7 else Severity.MEDIUM,
-                reported_by=self.request.user if getattr(self.request.user, "is_authenticated", False) else None,
+                description=(f"Detected by {obj.source} (confidence {obj.confidence:.0%}). "
+                             f"No licensed concession covers this location."),
             )
 
     @action(detail=True, methods=["post"])
@@ -187,7 +186,7 @@ class DetectedMiningSiteViewSet(viewsets.ModelViewSet):
                                          "status_display": d.get_status_display(),
                                          "confidence": d.confidence, "region": d.region,
                                          "source": d.source, "operator": d.operator_name,
-                                         "concession": (d.matched_concession.code
+                                         "concession": (d.matched_concession.reference
                                                         if d.matched_concession_id else None)}})
         return Response({"type": "FeatureCollection", "features": feats})
 
@@ -249,17 +248,7 @@ class IllegalMiningAlertsView(APIView):
                 "maps_link": f"https://www.google.com/maps?q={lat},{lng}",
             })
         alerts.sort(key=lambda a: -a["probability"])
-        alerts = alerts[:50]
-        # Link each site to gold lots whose recorded origin lies within 3 km —
-        # the lots investigators should hold or trace.
-        from production.models import GoldBatch
-
-        from .sourcing import lots_near
-        batches = list(GoldBatch.objects.select_related("current_owner"))
-        for a in alerts:
-            a["linked_lots"] = lots_near(a["latitude"], a["longitude"], km=3.0, batches=batches)[:10]
         summary = {"total": len(alerts),
                    "critical": sum(1 for a in alerts if a["band"] == "critical"),
-                   "high": sum(1 for a in alerts if a["band"] == "high"),
-                   "linked_lots": len({lot["batch_code"] for a in alerts for lot in a["linked_lots"]})}
-        return Response({"summary": summary, "alerts": alerts})
+                   "high": sum(1 for a in alerts if a["band"] == "high")}
+        return Response({"summary": summary, "alerts": alerts[:50]})

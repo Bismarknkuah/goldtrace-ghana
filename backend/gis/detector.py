@@ -37,14 +37,14 @@ def features_for(lat: float, lng: float, *, concessions, hotspots, detections,
     # distance to nearest concession centroid-ish (use first polygon vertex as proxy)
     nearest = None
     for c in concessions:
-        pts = []
-        if c.centroid_lat is not None and c.centroid_lng is not None:
-            pts.append((c.centroid_lat, c.centroid_lng))
-        ring = ((c.boundary or {}).get("coordinates") or [[]])[0]
-        pts += [(p[1], p[0]) for p in ring if len(p) >= 2]
-        for plat, plng in pts:
-            dkm = haversine_km(lat, lng, plat, plng)
-            nearest = dkm if nearest is None else min(nearest, dkm)
+        geom = getattr(c, "geometry", None) or {}
+        coords = (geom.get("coordinates") or [[]])[0]
+        for pt in coords[:1]:
+            try:
+                d = haversine_km(lat, lng, pt[1], pt[0])
+                nearest = d if nearest is None else min(nearest, d)
+            except Exception:
+                pass
     hs = sum(1 for h in hotspots if haversine_km(lat, lng, h.latitude, h.longitude) <= 5)
     il = sum(1 for d in detections
              if "illegal" in d.status and haversine_km(lat, lng, d.latitude, d.longitude) <= 5)

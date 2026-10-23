@@ -21,7 +21,6 @@ import PublicIcon from "@mui/icons-material/Public";
 import GroupIcon from "@mui/icons-material/Group";
 import LicenseIcon from "@mui/icons-material/VerifiedUser";
 import ComplianceIcon from "@mui/icons-material/FactCheck";
-import RulesIcon from "@mui/icons-material/Gavel";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -58,7 +57,6 @@ const NAV: Record<string, Item> = {
   requests: { to: "/requests", label: "Purchase requests", icon: <StorefrontIcon /> },
   users: { to: "/users", label: "User management", icon: <GroupIcon /> },
   profile: { to: "/profile", label: "My profile", icon: <PersonIcon /> },
-  rules: { to: "/rules", label: "Trading rules & my compliance", icon: <RulesIcon /> },
   transparency: { to: "/transparency", label: "Transparency", icon: <PublicIcon /> },
   sites: { to: "/sites", label: "Mining sites (satellite)", icon: <PublicIcon /> },
   settings: { to: "/settings", label: "System settings", icon: <GroupIcon /> },
@@ -70,7 +68,7 @@ const SECTIONS: { title: string; keys: string[] }[] = [
   { title: "", keys: ["overview"] },
   { title: "Supply chain", keys: ["miners", "companies", "batches", "track", "transfers", "deliveries", "courier"] },
   { title: "Trading", keys: ["marketplace", "requests", "receipts", "certificates"] },
-  { title: "Compliance & risk", keys: ["rules", "intelligence", "security", "compliance", "licensing", "verify"] },
+  { title: "Compliance & risk", keys: ["intelligence", "security", "compliance", "licensing", "verify"] },
   { title: "Oversight", keys: ["map", "sites", "reports", "revenue", "transparency", "users", "settings"] },
   { title: "Account", keys: ["profile"] },
 ];
@@ -124,7 +122,6 @@ export default function Layout() {
 
   const baseKeys = (user && ROLE_NAV[user.role]) || DEFAULT_NAV;
   const withExtras = [...baseKeys];
-  if (!withExtras.includes("rules")) withExtras.push("rules");
   if (!withExtras.includes("transparency")) withExtras.push("transparency");
   if (!withExtras.includes("profile")) withExtras.push("profile");
   const { data: feat } = useMyFeaturesQuery(undefined, { skip: !user });

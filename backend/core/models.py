@@ -66,8 +66,6 @@ class SystemConfig(models.Model):
     risk_review_threshold = models.PositiveSmallIntegerField(default=45)  # lot risk >= -> human review
     mass_balance_tolerance_pct = models.FloatField(default=0.5)           # refinery reconciliation
     fx_discrepancy_pct = models.FloatField(default=5.0)                   # BoG FX flag
-    price_band_below_pct = models.FloatField(default=10.0)  # max % below BoG reference
-    price_band_above_pct = models.FloatField(default=2.0)   # GoldBod price cap: max % above published price
     max_report_attachments = models.PositiveSmallIntegerField(default=8)
     updated_at = models.DateTimeField(auto_now=True)
 

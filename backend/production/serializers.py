@@ -34,12 +34,6 @@ class GoldBatchSerializer(serializers.ModelSerializer):
             "status", "security_status", "listed_for_sale", "asking_price_ghs", "seal_number", "origin_latitude", "origin_longitude", "field_notes", "source_lots", "is_aggregated", "mass_balance_ok", "created_by", "current_owner", "created_at", "updated_at",
         )
 
-    def validate(self, attrs):
-        from gis.ghana import validate_point
-        validate_point(attrs.get("origin_latitude"), attrs.get("origin_longitude"),
-                       field="origin_latitude")
-        return attrs
-
 
 class PassportSerializer(serializers.Serializer):
     """Public-facing verification payload returned by the QR-scan endpoint."""

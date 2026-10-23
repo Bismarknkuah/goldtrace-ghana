@@ -7,7 +7,6 @@ import {
   useSecurityOverviewQuery, useHotspotsGeoQuery, useAnomaliesQuery, useIllegalMiningAlertsQuery,
   usePublicReportsQuery,
 } from "../services/api";
-import ComplianceChecklist from "../components/ComplianceChecklist";
 
 // Each role maps to one operating cluster; every cluster has its own dashboard.
 const CLUSTER: Record<string, string> = {
@@ -129,8 +128,6 @@ export default function Dashboard() {
         </CardContent></Card>
       )}
 
-      {(isProd || isBuy || isAssay || isExp) && <ComplianceChecklist compact />}
-
       {complianceRole && illegal.data && illegal.data.summary.total > 0 && (
         <Card sx={{ border: "1px solid #E0B4AE", bgcolor: "#FBF3F1" }}><CardContent>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
@@ -151,11 +148,6 @@ export default function Dashboard() {
                 <Typography className="mono" sx={{ fontSize: 13 }}>{al.latitude.toFixed(5)}, {al.longitude.toFixed(5)}</Typography>
                 <Typography variant="body2" color="text.secondary">{al.region}</Typography>
                 <a href={al.maps_link} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "#7A6A2E" }}>Open location ↗</a>
-                {(al.linked_lots?.length ?? 0) > 0 && (
-                  <Chip size="small" variant="outlined" color="error" clickable
-                    onClick={() => navigate(`/track?code=${al.linked_lots![0].batch_code}`)}
-                    label={`${al.linked_lots!.length} gold lot${al.linked_lots!.length > 1 ? "s" : ""} sourced within 3 km`} />
-                )}
               </Stack>
             ))}
           </Stack>

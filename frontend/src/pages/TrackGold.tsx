@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState } from "react";
 import { Alert, Box, Button, Card, CardContent, Chip, Stack, TextField, Typography } from "@mui/material";
 import GppGoodIcon from "@mui/icons-material/GppGood";
 import ReportIcon from "@mui/icons-material/ReportProblem";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
 import LinkOffIcon from "@mui/icons-material/LinkOff";
 import { useTrackGoldQuery, useReportIncidentMutation, useScanSealMutation,
-  useClearSecurityMutation, useGoldLookupQuery } from "../services/api";
-import ProvenanceStory from "../components/ProvenanceStory";
+  useClearSecurityMutation } from "../services/api";
 import { useAppSelector } from "../app/hooks";
 import ChainTimeline from "../components/ChainTimeline";
 
@@ -22,15 +20,9 @@ const CAN_REPORT = ["super_admin", "goldbod_officer", "ceo", "security_agency", 
 const CAN_CLEAR = ["super_admin", "goldbod_officer", "ceo", "security_agency"];
 
 export default function TrackGold() {
-  const [params, setParams] = useSearchParams();
-  const [input, setInput] = useState(params.get("code") ?? "");
-  const [code, setCode] = useState(params.get("code") ?? "");
-  const [term, setTerm] = useState("");
-  const { data, isFetching, isError, error } = useTrackGoldQuery(code, { skip: !code });
-  const { data: suggestions } = useGoldLookupQuery(term);
-  useEffect(() => { const h = setTimeout(() => setTerm(input.trim()), 250); return () => clearTimeout(h); }, [input]);
-  const go = (c: string) => { const v = c.trim().toUpperCase(); setInput(v); setCode(v); setParams(v ? { code: v } : {}); };
-  const errMsg = (error as { data?: { detail?: string } } | undefined)?.data?.detail;
+  const [input, setInput] = useState("");
+  const [code, setCode] = useState("");
+  const { data, isFetching, isError } = useTrackGoldQuery(code, { skip: !code });
   const [report, { isLoading }] = useReportIncidentMutation();
   const [scanSeal] = useScanSealMutation();
   const [clearSecurity, { isLoading: clearing }] = useClearSecurityMutation();
@@ -61,33 +53,16 @@ export default function TrackGold() {
     <Stack spacing={3}>
       <Box>
         <Typography variant="h4">Track gold</Typography>
-        <Typography color="text.secondary">
-          Trace any gold lot from the mine to today: who produced it, every owner, where it has been,
-          whether it was tested, and whether its record can be trusted.
-        </Typography>
+        <Typography color="text.secondary">Trace any single batch end to end — origin, custody, location and security.</Typography>
       </Box>
       <Stack direction="row" spacing={1.5}>
-        <TextField fullWidth placeholder="Gold code (GH-…), region or producer licence" value={input}
+        <TextField fullWidth placeholder="GH-XXXXXXXXXX" value={input}
           onChange={(e) => setInput(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === "Enter" && go(input)} />
-        <Button variant="contained" onClick={() => go(input)} disabled={!input}>Trace</Button>
+          onKeyDown={(e) => e.key === "Enter" && setCode(input.trim())} />
+        <Button variant="contained" onClick={() => setCode(input.trim())} disabled={!input}>Track</Button>
       </Stack>
-      {(suggestions?.results?.length ?? 0) > 0 && (!data || term !== code) && (
-        <Box>
-          <Typography variant="caption" color="text.secondary">
-            {term ? "Matching gold you can trace" : "Recent gold you can trace"} — click to open
-          </Typography>
-          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1, mt: 0.5 }}>
-            {suggestions!.results.map((r) => (
-              <Chip key={r.batch_code} onClick={() => go(r.batch_code)} clickable variant="outlined"
-                color={r.security_status === "stolen" || r.security_status === "missing" ? "error" : "default"}
-                label={`${r.batch_code} · ${r.region || "—"} · ${Number(r.gross_weight_g).toLocaleString()} g · ${r.status}`} />
-            ))}
-          </Stack>
-        </Box>
-      )}
 
-      {isError && code && <Alert severity="error">{errMsg ?? `No gold found for ${code}.`}</Alert>}
+      {isError && code && <Typography color="error">No gold found for {code}.</Typography>}
       {isFetching && <Typography color="text.secondary">Locating…</Typography>}
 
       {data && sec && (
@@ -131,8 +106,6 @@ export default function TrackGold() {
               )}
             </CardContent>
           </Card>
-
-          {data.provenance && <ProvenanceStory p={data.provenance} code={data.batch_code} />}
 
           {data.tamper && (
             <Card sx={{ border: "1px solid #E0B4AE", bgcolor: "#FBF3F1" }}><CardContent>

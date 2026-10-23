@@ -75,11 +75,6 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
                   "role", "position", "phone", "organization", "region", "district",
                   "latitude", "longitude")
 
-    def validate(self, attrs):
-        from gis.ghana import validate_point
-        validate_point(attrs.get("latitude"), attrs.get("longitude"))
-        return attrs
-
     def create(self, validated_data):
         password = validated_data.pop("password")
         pos = validated_data.get("position")

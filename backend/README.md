@@ -156,27 +156,3 @@ miner registers ─▶ creates GoldBatch (QR + origin custody event)
        └▶ ExportCertificate.issue (chain verified ─▶ cert QR + export custody event)
            └▶ customs GET /exports/certificates/verify/?number=GHEX-... ─▶ {valid: true}
 ```
-
-## Trial market data (`seed_market`)
-
-Runs once on deploy after `seed_demo`. It adds licensed miners in Tarkwa, Prestea, Dunkwa-on-Offin,
-Kibi, Bibiani, Konongo and Wa, plus licensed Tier 1 and Tier 2 buyers and aggregators. Each lot is
-assayed and has a GPS origin and a full ownership chain that follows the GoldBod order. Lots are
-listed for sale at every tier. All names are fictional and the password is `Goldtrace2026!`.
-
-| Try as | Sees on the marketplace |
-|---|---|
-| `nana.tier1.tarkwa` (Tier 1) | Miners' lots only |
-| `kofi.tier2.kumasi` (Tier 2) | Miners' and Tier 1 lots |
-| `goldcoast.aggregator` | Miners' and Tier 2 lots |
-| `goldbod.officer` | Miners', Tier 2, aggregator, refinery and large-scale mine lots |
-| `refinery.op` / `ama.exporter` / `intl.buyer` | GoldBod stock (plus refinery or exporter stock) |
-| `kwame.asante` (miner) | Nothing to buy. Miners sell only. |
-
-Test cases (field notes start with `TEST:`):
-- A lot whose origin is outside its concession. Held for review.
-- A lot mined beside a confirmed illegal dredging site. Blocked.
-- A lot priced 18% below the reference. Held for review.
-- An unassayed lot.
-- `yaa.tier1.expired`, whose licence has expired. Blocked.
-- `kojo.badu`, whose mining licence is suspended. Cannot list.

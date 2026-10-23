@@ -155,8 +155,8 @@ class Command(BaseCommand):
         cert.save(update_fields=["certificate_hash", "status", "issued_by", "issued_at"])
 
         for title, lat, lng, sev in [
-            ("Unlicensed pit — Adansi North (near Obuasi)", 6.27, -1.61, Severity.HIGH),
-            ("River siltation — Offin River, Dunkwa", 5.9624, -1.7799, Severity.MEDIUM),
+            ("Unlicensed pit — Anyinam", 6.27, -1.61, Severity.HIGH),
+            ("River siltation — Offin", 6.15, -1.73, Severity.MEDIUM),
         ]:
             Hotspot.objects.get_or_create(
                 title=title, defaults={"latitude": lat, "longitude": lng,
