@@ -1,0 +1,15 @@
+# GOLDTRACE GHANA — backend dependencies
+Django==6.0.6
+django-mongodb-backend==6.0.*
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+drf-spectacular==0.29.0
+django-cors-headers==4.9.0
+qrcode[pil]==8.2
+Pillow==12.1.1
+python-dotenv==1.2.2
+celery==5.6.3
+redis==8.0.0
+# production server
+gunicorn==23.0.0
+whitenoise==6.8.2

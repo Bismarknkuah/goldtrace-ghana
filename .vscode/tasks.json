@@ -1,0 +1,53 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend: Setup (venv + install + migrate + seed)",
+      "type": "shell",
+      "command": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python manage.py makemigrations && .venv/bin/python manage.py migrate && .venv/bin/python manage.py seed_demo",
+      "windows": {
+        "command": "python -m venv .venv; .venv\\Scripts\\pip install -r requirements.txt; .venv\\Scripts\\python manage.py makemigrations; .venv\\Scripts\\python manage.py migrate; .venv\\Scripts\\python manage.py seed_demo"
+      },
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: Run server",
+      "type": "shell",
+      "command": ".venv/bin/python manage.py runserver",
+      "windows": { "command": ".venv\\Scripts\\python manage.py runserver" },
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Install",
+      "type": "shell",
+      "command": "npm install",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Run dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Mobile: Start (Expo)",
+      "type": "shell",
+      "command": "npm install && npx expo start",
+      "options": { "cwd": "${workspaceFolder}/mobile" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "▶ Run All (backend + frontend)",
+      "dependsOn": ["Backend: Run server", "Frontend: Run dev"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}
