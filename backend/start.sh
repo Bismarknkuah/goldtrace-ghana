@@ -7,6 +7,9 @@ python manage.py migrate --noinput || echo "migrate reported an issue; continuin
 echo "==> Seeding demo data (idempotent — runs once)"
 python manage.py seed_demo || echo "seed skipped/failed; continuing"
 
+echo "==> Seeding GoldBod-compliant market data (idempotent — runs once)"
+python manage.py seed_market || echo "market seed skipped/failed; continuing"
+
 echo "==> Auditing geographic data"
 python manage.py fix_geodata || echo "geodata audit skipped; continuing"
 

@@ -105,6 +105,20 @@ export default function Marketplace() {
         </Button>
       </Stack>
 
+      {market?.me && (
+        <Alert severity={market.me.can_buy_from.length ? "info" : "warning"} icon={false}
+          action={<Button size="small" onClick={() => navigate("/rules")}>Trading rules</Button>}>
+          <b>GoldBod rules for you ({market.me.role}):</b>{" "}
+          {market.me.can_buy_from.length
+            ? <>you may buy only from {market.me.can_buy_from.join(", ")}</>
+            : <>your role may not buy gold on the local market</>}
+          {" · "}
+          {market.me.can_sell_to.length
+            ? <>you may sell only to {market.me.can_sell_to.join(", ")}</>
+            : <>your role may not resell gold</>}
+          . Only lots you are allowed to buy are shown. Prices may not exceed GoldBod's published price.
+        </Alert>
+      )}
       {msg && <Alert severity={msg.type} onClose={() => setMsg(null)}>{msg.text}</Alert>}
 
       <Box className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -190,6 +204,11 @@ export default function Marketplace() {
               <Typography variant="body2" sx={{ mt: 1.5 }}>
                 Seller: <b>{l.seller_name}</b> ({l.seller_role})
               </Typography>
+              {l.trade_rule && (
+                <Typography variant="caption" display="block" sx={{ color: "#2E7D32" }}>
+                  ✓ {l.trade_rule}
+                </Typography>
+              )}
               <Typography variant="caption" color="text.secondary">
                 Producer licence {l.producer_licence ?? "—"} · {l.producer_licence_status ?? "unknown"}
                 {" · "}listed {new Date(l.listed_at).toLocaleDateString()}

@@ -230,11 +230,14 @@ def precheck_transaction(batch, buyer, price=None) -> dict:
             pct = float((Decimal(str(price)) - ref) / ref * 100) if ref else 0.0
             low, high = cfg.price_band_below_pct, cfg.price_band_above_pct
             ok = -low <= pct <= high
-            add("Price vs BoG reference", "pass" if ok else "fail",
-                (f"Price is {abs(pct):.1f}% {'below' if pct < 0 else 'above'} the reference value "
+            over_cap = pct > high
+            add("Price vs GoldBod price", "pass" if ok else "fail",
+                (f"Price is {abs(pct):.1f}% {'below' if pct < 0 else 'above'} the GoldBod/BoG reference value "
                  f"of GHS {ref:,.2f}" + ("." if ok else
-                 f" — outside the allowed band (−{low:g}% to +{high:g}%). "
-                 + ("Possible under-payment of the miner." if pct < 0 else "Possible value inflation / laundering."))))
+                 (f" — above the GoldBod price cap (+{high:g}%). Licensed buyers may not pay above "
+                  "GoldBod's published price (Act 1140, s.63)." if over_cap else
+                  f" — more than {low:g}% below the reference. Possible under-payment of the miner."))),
+                hard=over_cap)
 
     # 8. Overall lot risk.
     risk = compute_lot_risk(batch, chain)

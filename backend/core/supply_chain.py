@@ -26,46 +26,47 @@ from accounts.models import Role
 R = Role
 
 # seller role -> {buyer role: (stage code, plain-language basis)}
+# Sources: Act 1140; GoldBod licensing notices (Tier 1 buys from miners "for onward
+# sale to a licensed Tier 2 buyer"); GoldBod is the sole buyer/exporter of ASM gold,
+# buying through its licensed aggregators and buyers; foreign nationals may not trade
+# locally and may only buy by applying directly to GoldBod.
 FLOW = {
     R.MINER.value: {
-        R.TIER1_BUYER.value: ("miner_to_tier1", "Licensed miners sell to licensed Tier 1 buyers."),
-        R.TIER2_BUYER.value: ("miner_to_tier2", "Licensed miners may sell directly to Tier 2 buyers."),
-        R.AGGREGATOR.value: ("miner_to_aggregator", "Aggregators may buy directly from licensed miners."),
+        R.TIER1_BUYER.value: ("miner_to_tier1", "Licensed small-scale miners sell to licensed Tier 1 buyers in their buying area."),
+        R.TIER2_BUYER.value: ("miner_to_tier2", "Licensed miners may sell directly to a licensed Tier 2 buyer."),
+        R.AGGREGATOR.value: ("miner_to_aggregator", "GoldBod-licensed aggregators buy directly from licensed miners."),
         R.BUYING_AGENT.value: ("miner_to_agent", "GoldBod buying agents purchase from miners on GoldBod's behalf."),
         R.GOLDBOD_OFFICER.value: ("miner_to_goldbod", "Miners may sell directly to GoldBod at its buying centres."),
     },
     R.MINING_COMPANY.value: {
-        R.TIER2_BUYER.value: ("company_to_tier2", "Licensed mining companies may sell to Tier 2 buyers."),
-        R.AGGREGATOR.value: ("company_to_aggregator", "Licensed mining companies may sell to aggregators."),
-        R.BUYING_AGENT.value: ("company_to_agent", "GoldBod buying agents purchase on GoldBod's behalf."),
-        R.GOLDBOD_OFFICER.value: ("company_to_goldbod", "Mining companies may sell directly to GoldBod."),
+        R.GOLDBOD_OFFICER.value: ("company_to_goldbod", "GoldBod may buy a portion or all of a large-scale mine's gold."),
+        R.REFINERY_OPERATOR.value: ("company_to_refinery", "Large-scale mines send doré to a licensed refinery."),
     },
     R.TIER1_BUYER.value: {
-        R.TIER2_BUYER.value: ("tier1_to_tier2", "Tier 1 buyers sell on to licensed Tier 2 buyers."),
-        R.AGGREGATOR.value: ("tier1_to_aggregator", "Aggregators may buy from Tier 1 buyers."),
-        R.BUYING_AGENT.value: ("tier1_to_agent", "GoldBod buying agents may buy from Tier 1 buyers."),
+        R.TIER2_BUYER.value: ("tier1_to_tier2", "A Tier 1 buyer buys from miners only for onward sale to a licensed Tier 2 buyer."),
     },
     R.TIER2_BUYER.value: {
-        R.AGGREGATOR.value: ("tier2_to_aggregator", "Tier 2 buyers sell on to licensed aggregators."),
-        R.BUYING_AGENT.value: ("tier2_to_agent", "GoldBod buying agents may buy from Tier 2 buyers."),
+        R.AGGREGATOR.value: ("tier2_to_aggregator", "Tier 2 buyers sell on to GoldBod-licensed aggregators."),
+        R.BUYING_AGENT.value: ("tier2_to_agent", "Tier 2 buyers may sell to GoldBod's buying agents."),
+        R.GOLDBOD_OFFICER.value: ("tier2_to_goldbod", "Tier 2 buyers may sell directly to GoldBod."),
     },
     R.AGGREGATOR.value: {
-        R.GOLDBOD_OFFICER.value: ("aggregator_to_goldbod", "Aggregators supply the gold they collect to GoldBod."),
+        R.GOLDBOD_OFFICER.value: ("aggregator_to_goldbod", "Aggregators deliver all gold they buy to GoldBod, the sole exporter of ASM gold."),
     },
     R.BUYING_AGENT.value: {
         R.GOLDBOD_OFFICER.value: ("agent_to_goldbod", "Buying agents hand gold bought on GoldBod's behalf to GoldBod."),
     },
     R.GOLDBOD_OFFICER.value: {
         R.REFINERY_OPERATOR.value: ("goldbod_to_refinery", "GoldBod sends gold to licensed refineries for refining."),
-        R.EXPORTER.value: ("goldbod_to_exporter", "GoldBod releases gold to its licensed exporters."),
-        R.INTERNATIONAL_BUYER.value: ("goldbod_to_offtaker", "Foreign off-takers buy only from GoldBod."),
+        R.EXPORTER.value: ("goldbod_to_exporter", "GoldBod releases gold to its licensed export agents."),
+        R.INTERNATIONAL_BUYER.value: ("goldbod_to_offtaker", "Foreign buyers may buy Ghana gold only by applying directly to GoldBod."),
     },
     R.REFINERY_OPERATOR.value: {
         R.GOLDBOD_OFFICER.value: ("refinery_to_goldbod", "Refined gold returns to GoldBod."),
         R.EXPORTER.value: ("refinery_to_exporter", "Refined gold may be released to a licensed exporter."),
     },
     R.EXPORTER.value: {
-        R.INTERNATIONAL_BUYER.value: ("exporter_to_offtaker", "Licensed exporters ship to approved international off-takers."),
+        R.INTERNATIONAL_BUYER.value: ("exporter_to_offtaker", "Licensed exporters ship GoldBod-released gold to approved foreign off-takers."),
     },
 }
 
@@ -116,8 +117,8 @@ def explain(seller_role: str, buyer_role: str) -> str:
         return rule[1]
     s, b = ROLE_LABEL.get(seller_role, seller_role), ROLE_LABEL.get(buyer_role, buyer_role)
     if buyer_role == R.INTERNATIONAL_BUYER.value:
-        return (f"International buyers may not buy gold locally from {_a(s)}. Foreign off-takers "
-                "buy only from GoldBod or its licensed exporters.")
+        return (f"Foreign buyers may not buy gold locally from {_a(s)}. Under Act 1140 they may "
+                "buy only by applying directly to GoldBod (or from its licensed exporters).")
     allowed = [ROLE_LABEL.get(x, x) for x in FLOW.get(seller_role, {})]
     if not allowed:
         return f"{_A(s)} is not permitted to sell gold under the GoldBod trading framework."
@@ -196,10 +197,14 @@ def rulebook() -> dict:
     return {"roles": out, "principles": [
         "GoldBod is the central buyer, assayer, valuer and exporter of gold in Ghana.",
         "Gold moves Miner → Tier 1 → Tier 2 → Aggregator → GoldBod → Refinery / Exporter → Off-taker; "
-        "a trade may skip ahead where the rules allow (e.g. a miner selling straight to an aggregator) but never go backward.",
+        "a miner may sell further up the chain (Tier 2, aggregator or GoldBod) but gold never moves backward.",
+        "A Tier 1 buyer may sell only to a licensed Tier 2 buyer.",
+        "Only Ghanaians and fully Ghanaian-owned companies may hold a gold-trading licence.",
         "Every trader must hold a valid licence for its tier; miners must hold an active mining licence.",
-        "Foreign buyers may not trade gold locally — they only off-take from GoldBod or its licensed exporters.",
-        "Prices are referenced to the Bank of Ghana reference rate; prices far from it are held for review.",
+        "Foreign nationals may not trade gold locally — they buy only by applying directly to GoldBod.",
+        "Local gold is priced in cedis. No licensed buyer may pay above GoldBod's published price (plus approved bonuses); "
+        "prices far below it are held for review to protect miners.",
+        "Dealing in gold without a GoldBod licence is a criminal offence.",
         "Every sale needs an assayed lot, an intact custody record and a payment receipt.",
         "Gold whose origin lies outside any licensed concession, or near an illegal-mining site, is held or refused.",
     ]}

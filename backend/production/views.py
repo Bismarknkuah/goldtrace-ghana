@@ -335,7 +335,7 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
         purity_desc|best_value)."""
         from decimal import Decimal
 
-        from core.supply_chain import resolve_stage
+        from core.supply_chain import FLOW, ROLE_LABEL, may_buy_from, resolve_stage
         from pricing.services import current_rate
 
         user = request.user
@@ -373,7 +373,10 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
             chain = verify_chain(b)
             risk = compute_lot_risk(b, chain)
             seller_name = f"{owner.first_name} {owner.last_name}".strip() or owner.username
+            rule = FLOW.get(owner.role, {}).get(user.role)
             row = {
+                "trade_rule": rule[1] if rule else "Oversight view",
+                "who_can_buy": [ROLE_LABEL.get(r, r) for r in FLOW.get(owner.role, {})],
                 "id": str(b.id), "batch_code": b.batch_code,
                 "gross_weight_g": str(b.gross_weight_g),
                 "fine_weight_g": f"{fine:.3f}" if fine else None,
@@ -430,17 +433,51 @@ class GoldBatchViewSet(viewsets.ModelViewSet):
             "avg_price_per_gram": f"{(sum(priced) / len(priced)):.2f}" if priced else None,
             "reference_rate_ghs_per_g": f"{rate:.2f}",
         }
-        return Response({"listings": out, "summary": summary,
+        me = {"role": ROLE_LABEL.get(user.role, user.role),
+              "can_buy_from": [ROLE_LABEL.get(r, r) for r in may_buy_from(user.role)],
+              "can_sell_to": [ROLE_LABEL.get(r, r) for r in FLOW.get(user.role, {})]}
+        return Response({"listings": out, "summary": summary, "me": me,
                          "regions": sorted(r for r in regions if r)})
 
     @extend_schema(tags=["production"])
     @action(detail=True, methods=["post"])
     def list_for_sale(self, request, pk=None):
+        from decimal import Decimal, InvalidOperation
+
+        from core.models import SystemConfig
+        from core.supply_chain import FLOW, ROLE_LABEL, licence_status
+        from pricing.services import current_rate
+
         batch = self.get_object()
-        if batch.current_owner_id != request.user.id and not request.user.is_superuser:
+        user = request.user
+        if batch.current_owner_id != user.id and not user.is_superuser:
             return Response({"detail": "Only the current owner can list this gold."}, status=403)
-        batch.listed_for_sale = True
+        owner = batch.current_owner
+        if owner and not FLOW.get(owner.role):
+            return Response({"detail": f"{ROLE_LABEL.get(owner.role, owner.role)}s may not resell gold "
+                             "under GoldBod rules."}, status=403)
+        lic = licence_status(owner) if owner else {"required": False}
+        if lic["required"] and not lic["ok"]:
+            return Response({"detail": f"You cannot sell without a valid licence: {lic['detail']}"},
+                            status=403)
+        if batch.security_status in ("stolen", "missing", "flagged"):
+            return Response({"detail": f"This gold is {batch.security_status} and cannot be listed "
+                             "until GoldBod security clears it."}, status=403)
         price = request.data.get("asking_price_ghs")
+        if price not in (None, ""):
+            try:
+                price_d = Decimal(str(price))
+            except InvalidOperation:
+                return Response({"detail": "Asking price must be a number."}, status=400)
+            fine = batch.fine_weight_g or (
+                Decimal(str(batch.gross_weight_g)) * Decimal(batch.fineness) / 1000 if batch.fineness else None)
+            if fine:
+                cap = Decimal(str(fine)) * current_rate() * (1 + Decimal(str(SystemConfig.get().price_band_above_pct)) / 100)
+                if price_d > cap:
+                    return Response({"detail": f"Asking price GHS {price_d:,.2f} is above the GoldBod price cap "
+                                     f"of GHS {cap:,.2f} for this lot. Licensed traders may not sell above "
+                                     "GoldBod's published price."}, status=400)
+        batch.listed_for_sale = True
         if price not in (None, ""):
             batch.asking_price_ghs = price
         if request.data.get("seal_number"):

@@ -243,10 +243,12 @@ export interface MarketListing {
   source_lot_count: number; seller: string; seller_name: string; seller_role: string;
   producer_licence: string | null; producer_licence_status: string | null;
   security_status: string; chain_valid: boolean; risk_score: number;
+  trade_rule?: string; who_can_buy?: string[];
   risk_band: "low" | "medium" | "high" | "critical"; listed_at: string; seal_number: string | null;
 }
 export interface MarketResponse {
   listings: MarketListing[]; regions: string[];
+  me?: { role: string; can_buy_from: string[]; can_sell_to: string[] };
   summary: { count: number; total_weight_g: string; avg_price_per_gram: string | null;
     reference_rate_ghs_per_g: string };
 }
